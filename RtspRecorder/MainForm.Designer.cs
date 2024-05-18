@@ -96,6 +96,7 @@
             // LabelVideoFile
             // 
             this.LabelVideoFile.AutoSize = true;
+            this.LabelVideoFile.Cursor = System.Windows.Forms.Cursors.Hand;
             this.LabelVideoFile.Location = new System.Drawing.Point(193, 100);
             this.LabelVideoFile.Name = "LabelVideoFile";
             this.LabelVideoFile.Size = new System.Drawing.Size(29, 12);

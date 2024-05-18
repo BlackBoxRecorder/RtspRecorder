@@ -14,6 +14,9 @@ namespace RtspRecorder
         public MainForm()
         {
             InitializeComponent();
+
+            LabelRecordTime.Text = "";
+            LabelVideoFile.Text = "";
         }
 
         private CancellationTokenSource cts;
@@ -21,7 +24,7 @@ namespace RtspRecorder
 
         private readonly string myVideoDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
-            "CameraView"
+            "RtspRecorder"
         );
 
         private readonly ConcurrentQueue<Mat> queue = new ConcurrentQueue<Mat>();
@@ -32,26 +35,34 @@ namespace RtspRecorder
         private int videoWidth;
         private int videoHeight;
 
-        private void BtnPlay_Click(object sender, EventArgs e)
+        private async void BtnPlay_Click(object sender, EventArgs e)
         {
             VideoCapture cap = new VideoCapture();
             var addr = TextAddr.Text;
             var suc = int.TryParse(addr, out var camIndex);
             BtnPlay.Enabled = false;
+            BtnPlay.Text = "正在打开";
 
-            if (suc)
+            await Task.Run(() =>
             {
-                cap.Open(camIndex);
-            }
-            else
-            {
-                cap.Open(addr);
-            }
+                if (suc)
+                {
+                    cap.Open(camIndex);
+                }
+                else
+                {
+                    cap.Open(addr);
+                }
+            });
+
+            BtnPlay.Text = "播放";
 
             if (!cap.IsOpened())
             {
                 MessageBox.Show("视频源打开失败");
                 BtnPlay.Enabled = true;
+                cap.Release();
+                cap.Dispose();
                 return;
             }
 
@@ -65,16 +76,17 @@ namespace RtspRecorder
                 token = cts.Token;
             }
 
+            isPlaying = true;
+
             while (!token.IsCancellationRequested)
             {
                 var mat = new Mat();
                 var readSuccess = cap.Read(mat);
                 if (!readSuccess)
                 {
-                    MessageBox.Show("视频结束");
                     CancelToken();
-                    BtnPlay.Enabled = true;
-                    return;
+                    MessageBox.Show("视频结束");
+                    break;
                 }
 
                 if (isRecording)
@@ -83,16 +95,13 @@ namespace RtspRecorder
                 }
 
                 Cv2.ImShow(addr, mat);
-                Cv2.WaitKey(5);
-
-                isPlaying = true;
+                await Task.Delay(1);
             }
 
             Cv2.DestroyAllWindows();
             cap.Release();
             cap.Dispose();
             BtnPlay.Enabled = true;
-            isPlaying = false;
         }
 
         private void BtnStopPlay_Click(object sender, EventArgs e)
@@ -119,10 +128,12 @@ namespace RtspRecorder
                 MessageBox.Show("请先播放视频，再开始录制");
                 return;
             }
+
             VideoWriter writer = new VideoWriter();
             videoFullpath = GetVideoFileName();
 
             BtnRecord.Enabled = false;
+
             bool opened = writer.Open(
                 videoFullpath,
                 FourCC.H264,
@@ -132,10 +143,12 @@ namespace RtspRecorder
 
             if (!opened)
             {
-                MessageBox.Show("视频写入失败");
+                MessageBox.Show("视频文件写入失败");
                 BtnRecord.Enabled = true;
                 return;
             }
+
+            LabelVideoFile.Text = $"文件：{Path.GetFileName(videoFullpath)}";
 
             Stopwatch stopwatch = Stopwatch.StartNew();
             stopwatch.Start();
@@ -162,22 +175,20 @@ namespace RtspRecorder
             writer.Release();
             writer.Dispose();
             stopwatch.Stop();
-
-            LabelVideoFile.Text = $"文件：{Path.GetFileName(videoFullpath)}";
         }
 
         private string GetVideoFileName()
         {
             var hashId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             var videoFile = $"{hashId}.mp4";
-            var videoFullpath = Path.Combine(myVideoDir, videoFile);
+            var fullpath = Path.Combine(myVideoDir, videoFile);
 
             if (!Directory.Exists(myVideoDir))
             {
                 Directory.CreateDirectory(myVideoDir);
             }
 
-            return videoFullpath;
+            return fullpath;
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -185,7 +196,7 @@ namespace RtspRecorder
             if (isRecording || isPlaying)
             {
                 e.Cancel = true;
-                MessageBox.Show("请停止录制");
+                MessageBox.Show("请停止播放");
             }
         }
 
